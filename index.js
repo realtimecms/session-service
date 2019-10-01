@@ -72,6 +72,10 @@ evs.registerEventListeners({
 
 })
 
+evs.dbPromise.then(db => require("../config/metricsWriter.js")(db,'session', () => ({
+
+})))
+
 
 process.on('unhandledRejection', (reason, p) => {
   console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
