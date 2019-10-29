@@ -8,8 +8,7 @@ const evs = require('rethink-event-sourcing')({
 
 evs.onStart(
   () => {
-    r.tableCreate('session')
-        .run(evs.db)
+    evs.db.run(r.tableCreate('session'))
         .then(ok=> console.log("TABLE session CREATED"))
         .catch(err => "ok")
   }
@@ -17,7 +16,7 @@ evs.onStart(
 
 evs.registerCommands({
   createSessionIfNotExists({ session }, emit) {
-    return r.table("session").get(session).run(evs.db).then(sessionRow => {
+    return evs.db.run(r.table("session").get(session)).then(sessionRow => {
       if(sessionRow) return "exists"
       emit([{
         type: "created",
@@ -27,7 +26,7 @@ evs.registerCommands({
     })
   },
   logout({ session }, emit) {
-    return r.table("session").get(session).run(evs.db).then(sessionRow => {
+    return evs.db.run(r.table("session").get(session)).then(sessionRow => {
       if(!sessionRow) throw evs.error("notFound")
       if(!sessionRow.user) throw evs.error("loggedOut")
       emit([{
@@ -42,39 +41,49 @@ evs.registerEventListeners({
   queuedBy: 'session',
 
   created({ session }) {
-    return r.table("session").insert({
-      id: session
-    }, { conflict: "update" }).run(evs.db)
+    return evs.db.run(
+      r.table("session").insert({
+        id: session
+      }, { conflict: "update" })
+    )
   },
 
   loggedIn({ session, user, roles, expire }) {
-    return r.table("session").insert({
-      id: session,
-      user,
-      roles,
-      expire
-    }, { conflict: "update" }).run(evs.db)
+    return evs.db.run(
+        r.table("session").insert({
+          id: session,
+          user,
+          roles,
+          expire
+        }, { conflict: "update" })
+    )
   },
 
   loggedOut({ session }) {
-    return r.table('session').get(session).replace(r.row.without('user','roles','expire')).run(evs.db)
+    return evs.db.run(
+        r.table('session').get(session).replace(r.row.without('user','roles','expire'))
+    )
   },
 
   userRemoved({ user }) {
-    return r.table("session").filter({ user }).replace(r.row.without('user','roles','expire')).run(evs.db)
+    return evs.db.run(
+        r.table("session").filter({ user }).replace(r.row.without('user','roles','expire'))
+    )
   },
 
   userRolesUpdated({ user, roles }) {
-    return r.table("session").filter({ user }).update({
-      roles
-    }).run(evs.db)
+    return evs.db.run(
+      r.table("session").filter({ user }).update({
+        roles
+      })
+    )
   }
 
 })
 
-evs.dbPromise.then(db => require("../config/metricsWriter.js")(db,'session', () => ({
+require("../config/metricsWriter.js")('session', () => ({
 
-})))
+}))
 
 
 process.on('unhandledRejection', (reason, p) => {
