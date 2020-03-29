@@ -11,8 +11,6 @@
   "author": "Michał Łaszczewski <michal@emikse.com>",
   "license": "BSD-3-Clause",
   "dependencies": {
-    "blue-tape": "^1.0.0",
-    "rethink-event-sourcing": "git+https://github.com/MLaszczewski/rethink-event-sourcing.git",
-    "rethinkdb": "^2.3.3"
+    "blue-tape": "^1.0.0"
   }
 }

@@ -1,91 +1,184 @@
-const r = require.main.rethinkdb || require('rethinkdb')
-if (require.main === module) require.main.rethinkdb = r
+const App = require("@live-change/framework")
+const validators = require("../validation")
+const app = new App()
 
-const crypto = require('crypto')
-const evs = require('rethink-event-sourcing')({
-  serviceName: 'session'
+const definition = app.createServiceDefinition({
+  name: "session",
+  validators
 })
 
-evs.onStart(
-  () => {
-    evs.db.run(r.tableCreate('session'))
-        .then(ok=> console.log("TABLE session CREATED"))
-        .catch(err => "ok")
-  }
-)
+const User = definition.foreignModel('users', 'User')
 
-evs.registerCommands({
-  createSessionIfNotExists({ session }, emit) {
-    return evs.db.run(r.table("session").get(session)).then(sessionRow => {
-      if(sessionRow) return "exists"
-      emit([{
-        type: "created",
-        session
-      }])
-      return "created"
+const Session = definition.model({
+  name: "Session",
+  properties: {
+    user: {
+      type: User
+    },
+    roles: {
+      type: Array,
+      of: {
+        type: String
+      }
+    }
+  }
+})
+
+definition.action({
+  name: "createSessionIfNotExists",
+  properties: {
+    session: {
+      type: String,
+      validation: ['nonEmpty']
+    }
+  },
+  async execute({ session }, { client, service }, emit) {
+    const currentSession = await Session.get(session)
+    if(currentSession) return 'exists'
+    emit({
+      type: "created",
+      session
     })
+    return 'created'
+  }
+})
+
+definition.action({
+  name: "logout",
+  properties: {
+    session: {
+      type: String,
+      validation: ['nonEmpty']
+    }
   },
-  logout({ session }, emit) {
-    return evs.db.run(r.table("session").get(session)).then(sessionRow => {
-      if(!sessionRow) throw evs.error("notFound")
-      if(!sessionRow.user) throw evs.error("loggedOut")
-      emit([{
-        type: "loggedOut",
-        session
-      }])
+  async execute({ session }, { client, service }, emit) {
+    if(session != client.session) throw new Error("hacking attempt")
+    const sessionRow = await Session.get(session)
+    if(!sessionRow) throw new Error("notFound")
+    if(!sessionRow.user) throw new Error("loggedOut")
+    emit({
+      type: "loggedOut",
+      session
     })
+    return 'loggedOut'
   }
 })
 
-evs.registerEventListeners({
-  queuedBy: 'session',
 
-  created({ session }) {
-    return evs.db.run(
-      r.table("session").insert({
-        id: session
-      }, { conflict: "update" })
-    )
+definition.event({
+  name: "created",
+  properties: {
+    session: {
+      type: Session
+    }
   },
-
-  loggedIn({ session, user, roles, expire }) {
-    return evs.db.run(
-        r.table("session").insert({
-          id: session,
-          user,
-          roles,
-          expire
-        }, { conflict: "update" })
-    )
-  },
-
-  loggedOut({ session }) {
-    return evs.db.run(
-        r.table('session').get(session).replace(r.row.without('user','roles','expire'))
-    )
-  },
-
-  userRemoved({ user }) {
-    return evs.db.run(
-        r.table("session").filter({ user }).replace(r.row.without('user','roles','expire'))
-    )
-  },
-
-  userRolesUpdated({ user, roles }) {
-    return evs.db.run(
-      r.table("session").filter({ user }).update({
-        roles
-      })
-    )
+  async execute({ session }) {
+    await Session.create({ id: session, user: null, roles: [] })
   }
-
 })
 
-require("../config/metricsWriter.js")('session', () => ({
+definition.event({
+  name: "loggedIn",
+  properties: {
+    session: {
+      type: Session
+    },
+    user: {
+      type: User
+    },
+    roles: {
+      type: Array,
+      of: {
+        type: String
+      }
+    },
+    expire: {
+      type: Date
+    }
+  },
+  async execute({ session, user, roles, expire }) {
+    await Session.update(session, { user, roles, expire })
+  }
+})
 
-}))
+definition.event({
+  name: "loggedOut",
+  properties: {
+    session: {
+      type: Session
+    }
+  },
+  async execute({ session }) {
+    await Session.update(session, { user: null, roles: [], expire: null })
+  }
+})
 
+definition.event({
+  name: "userRemoved",
+  properties: {
+    user: {
+      type: User
+    }
+  },
+  async execute({ user }, defn, service) {
+    await service.dao.get(['database', 'query', service.databaseName, `(${
+        async (input, output, { table, user }) => {
+        const path = from.slice('.')
+        await input.table(table).onChange((obj, oldObj) => {
+          if(obj && obj.user == user) {
+            output.table(table).update(obj.id, [
+              { op: 'merge', value: { user: null, roles: [], expire: null } }
+            ])
+          }
+        })
+      }
+    })`, { table: Session.tableName, user }])
+  }
+})
+
+definition.event({
+  name: "userRolesUpdated",
+  properties: {
+    user: {
+      type: User
+    },
+    roles: {
+      type: Array,
+      of: {
+        type: String
+      }
+    }
+  },
+  async execute({ user, roles }, defn, service) {
+    await service.dao.get(['database', 'query', service.databaseName, `(${
+        async (input, output, { table, user }) => {
+          const path = from.slice('.')
+          await input.table(table).onChange((obj, oldObj) => {
+            if(obj && obj.user == user) {
+              output.table(table).update(obj.id, [
+                { op: 'merge', value: { roles } }
+              ])
+            }
+          })
+        }
+    })`, { table: Session.tableName, user, roles }])
+  }
+})
+
+module.exports = definition
+
+async function start() {
+  app.processServiceDefinition(definition, [ ...app.defaultProcessors ])
+  await app.updateService(definition)//, { force: true })
+  const service = await app.startService(definition, { runCommands: true, handleEvents: true })
+
+  /*require("../config/metricsWriter.js")(definition.name, () => ({
+
+  }))*/
+}
+
+if (require.main === module) start().catch( error => { console.error(error); process.exit(1) })
 
 process.on('unhandledRejection', (reason, p) => {
   console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
-});
+})
