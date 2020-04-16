@@ -52,7 +52,7 @@ definition.action({
     }
   },
   async execute({ session }, { client, service }, emit) {
-    if(session != client.session) throw new Error("hacking attempt")
+    if(session != client.sessionId) throw new Error("hacking attempt")
     const sessionRow = await Session.get(session)
     if(!sessionRow) throw new Error("notFound")
     if(!sessionRow.user) throw new Error("loggedOut")
@@ -97,6 +97,7 @@ definition.event({
     }
   },
   async execute({ session, user, roles, expire }) {
+    console.log("SESSION UPDATE", session, { user, roles, expire })
     await Session.update(session, { user, roles, expire })
   }
 })
