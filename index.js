@@ -54,7 +54,7 @@ definition.action({
   async execute({ session }, { client, service }, emit) {
     if(session != client.sessionId) throw new Error("hacking attempt")
     const sessionRow = await Session.get(session)
-    if(!sessionRow) throw new Error("notFound")
+    if(!sessionRow) throw 'notFound'
     if(!sessionRow.user) throw new Error("loggedOut")
     emit({
       type: "loggedOut",
