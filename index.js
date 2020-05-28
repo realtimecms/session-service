@@ -64,6 +64,21 @@ definition.action({
   }
 })
 
+definition.trigger({
+  name: "UserDeleted",
+  properties: {
+    user: {
+      type: User,
+      idOnly: true
+    }
+  },
+  async execute({ user }, context, emit) {
+    emit([{
+      type: "UserDeleted",
+      user
+    }])
+  }
+})
 
 definition.event({
   name: "created",
@@ -115,16 +130,15 @@ definition.event({
 })
 
 definition.event({
-  name: "userRemoved",
+  name: "UserDeleted",
   properties: {
     user: {
       type: User
     }
   },
-  async execute({ user }, defn, service) {
-    await service.dao.get(['database', 'query', service.databaseName, `(${
+  async execute({ user }) {
+    await app.dao.request(['database', 'query'], app.databaseName, `(${
         async (input, output, { table, user }) => {
-        const path = from.slice('.')
         await input.table(table).onChange((obj, oldObj) => {
           if(obj && obj.user == user) {
             output.table(table).update(obj.id, [
@@ -133,7 +147,7 @@ definition.event({
           }
         })
       }
-    })`, { table: Session.tableName, user }])
+    })`, { table: Session.tableName, user })
   }
 })
 
@@ -150,10 +164,9 @@ definition.event({
       }
     }
   },
-  async execute({ user, roles }, defn, service) {
-    await service.dao.get(['database', 'query', service.databaseName, `(${
+  async execute({ user, roles }) {
+    await app.dao.request(['database', 'query'], app.databaseName, `(${
         async (input, output, { table, user }) => {
-          const path = from.slice('.')
           await input.table(table).onChange((obj, oldObj) => {
             if(obj && obj.user == user) {
               output.table(table).update(obj.id, [
@@ -162,7 +175,7 @@ definition.event({
             }
           })
         }
-    })`, { table: Session.tableName, user, roles }])
+    })`, { table: Session.tableName, user, roles })
   }
 })
 
