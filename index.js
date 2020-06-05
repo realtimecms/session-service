@@ -152,7 +152,7 @@ definition.event({
 })
 
 definition.event({
-  name: "userRolesUpdated",
+  name: "rolesUpdated",
   properties: {
     user: {
       type: User
@@ -166,7 +166,7 @@ definition.event({
   },
   async execute({ user, roles }) {
     await app.dao.request(['database', 'query'], app.databaseName, `(${
-        async (input, output, { table, user }) => {
+        async (input, output, { table, user, roles }) => {
           await input.table(table).onChange((obj, oldObj) => {
             if(obj && obj.user == user) {
               output.table(table).update(obj.id, [
