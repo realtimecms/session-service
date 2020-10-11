@@ -2,6 +2,10 @@ const App = require("@live-change/framework")
 const validators = require("../validation")
 const app = new App()
 
+
+const { language: defaultLanguage, timezone: defaultTimezone } = require('../config/defaults.js')
+
+
 const definition = app.createServiceDefinition({
   name: "session",
   validators
@@ -20,7 +24,24 @@ const Session = definition.model({
       of: {
         type: String
       }
+    },
+    language: {
+      type: String
+    },
+    timezone: {
+      type: String
     }
+  }
+})
+
+definition.view({
+  name: 'currentSession',
+  properties: {},
+  returns: {
+    type: Session
+  },
+  daoPath(params, { client, context }, method) {
+    return Session.path(client.sessionId)
   }
 })
 
@@ -30,16 +51,49 @@ definition.action({
     session: {
       type: String,
       validation: ['nonEmpty']
+    },
+    language: {
+      type: String
+    },
+    timezone: {
+      type: String
     }
   },
-  async execute({ session }, { client, service }, emit) {
+  async execute({ session, language, timezone }, { client, service }, emit) {
+    if(!session) session = client.sessionId
+    if(session != client.sessionId) throw new Error("Wrong session id")
     const currentSession = await Session.get(session)
     if(currentSession) return 'exists'
     emit({
       type: "created",
-      session
+      session,
+      language: language || defaultLanguage,
+      timezone: timezone || defaultTimezone
     })
     return 'created'
+  }
+})
+
+definition.action({
+  name: "setLanguageAndTimezone",
+  properties: {
+    language: {
+      type: String
+    },
+    timezone: {
+      type: String
+    }
+  },
+  async execute({ language, timezone }, { client, service }, emit) {
+    const currentSession = await Session.get(client.sessionId)
+    if(!currentSession) throw 'notFound'
+    emit({
+      type: "languageAndTimezoneUpdated",
+      session: client.sessionId,
+      language,
+      timezone
+    })
+    return 'ok'
   }
 })
 
@@ -87,8 +141,35 @@ definition.event({
       type: Session
     }
   },
-  async execute({ session }) {
-    await Session.create({ id: session, user: null, roles: [] })
+  async execute({ session, language, timezone }) {
+    await Session.create({
+      id: session,
+      language: language || defaultLanguage,
+      timezone: timezone || defaultTimezone,
+      user: null,
+      roles: []
+    })
+  }
+})
+
+definition.event({
+  name: "languageAndTimezoneUpdated",
+  properties: {
+    session: {
+      type: Session
+    },
+    language: {
+      type: String
+    },
+    timezone: {
+      type: String
+    }
+  },
+  async execute({ session, language, timezone }) {
+    await Session.update(session, {
+      language: language,
+      timezone: timezone
+    })
   }
 })
 
@@ -111,9 +192,9 @@ definition.event({
       type: Date
     }
   },
-  async execute({ session, user, roles, expire }) {
-    console.log("SESSION UPDATE", session, { user, roles, expire })
-    await Session.update(session, { user, roles, expire })
+  async execute({ session, user, roles, expire, language, timezone }) {
+    console.log("SESSION UPDATE", session, { user, roles, expire, language, timezone })
+    await Session.update(session, { user, roles, expire, language, timezone })
   }
 })
 
