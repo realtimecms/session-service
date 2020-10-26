@@ -102,12 +102,19 @@ definition.action({
   properties: {
   },
   async execute({ session }, { client, service }, emit) {
-    const sessionRow = await Session.get(client.sessionId)
+    if(!session) session = client.sessionId
+    if(session != client.sessionId) throw new Error("Wrong session id")
+    const sessionRow = await Session.get(session)
     if(!sessionRow) throw 'notFound'
     if(!sessionRow.user) throw "loggedOut"
     emit({
       type: "loggedOut",
       session
+    })
+    await service.trigger({
+      type: "OnLogout",
+      user: sessionRow.user,
+      session: client.sessionId
     })
     return 'loggedOut'
   }
