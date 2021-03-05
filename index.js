@@ -59,11 +59,13 @@ definition.action({
       type: String
     }
   },
+  waitForEvents: true,
   async execute({ session, language, timezone }, { client, service }, emit) {
     if(!session) session = client.sessionId
     if(session != client.sessionId) throw new Error("Wrong session id")
     const currentSession = await Session.get(session)
     if(currentSession) return 'exists'
+    console.log("CREATE SESSION!", session, "AT", (new Date()).toISOString())
     emit({
       type: "created",
       session,
@@ -151,6 +153,7 @@ definition.event({
       user: null,
       roles: []
     })
+    console.log("SESSION CREATED!", session, "AT", (new Date()).toISOString())
   }
 })
 
