@@ -146,6 +146,7 @@ definition.event({
     }
   },
   async execute({ session, language, timezone }) {
+    console.log("SESSION CREATING!", session, "AT", (new Date()).toISOString())
     await Session.create({
       id: session,
       language: language || defaultLanguage,
