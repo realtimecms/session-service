@@ -31,6 +31,11 @@ const Session = definition.model({
     timezone: {
       type: String
     }
+  },
+  indexes: {
+    byUser: {
+      property: "user"
+    }
   }
 })
 
@@ -225,16 +230,20 @@ definition.event({
   },
   async execute({ user }) {
     await app.dao.request(['database', 'query'], app.databaseName, `(${
-        async (input, output, { table, user }) => {
-        await input.table(table).onChange((obj, oldObj) => {
-          if(obj && obj.user == user) {
-            output.table(table).update(obj.id, [
+      async (input, output, { table, index, user }) => {
+        const prefix = `"${user}"_`
+        await (await input.index(index)).range({
+          gte: prefix,
+          lte: prefix+"\xFF\xFF\xFF\xFF"
+        }).onChange((ind, oldInd) => {
+          if(ind && ind.to) {
+            output.table(table).update(ind.to, [
               { op: 'merge', value: { user: null, roles: [], expire: null } }
             ])
           }
         })
       }
-    })`, { table: Session.tableName, user })
+    })`, { table: Session.tableName, index: Session.tableName + '_byUser', user })
   }
 })
 
@@ -253,16 +262,20 @@ definition.event({
   },
   async execute({ user, roles }) {
     await app.dao.request(['database', 'query'], app.databaseName, `(${
-        async (input, output, { table, user, roles }) => {
-          await input.table(table).onChange((obj, oldObj) => {
-            if(obj && obj.user == user) {
-              output.table(table).update(obj.id, [
+        async (input, output, { table, index, user, roles }) => {
+          const prefix = `"${user}"_`
+          await (await input.index(index)).range({
+            gte: prefix,
+            lte: prefix+"\xFF\xFF\xFF\xFF"
+          }).onChange((ind, oldInd) => {
+            if(ind && ind.to) {
+              output.table(table).update(ind.to, [
                 { op: 'merge', value: { roles } }
               ])
             }
           })
         }
-    })`, { table: Session.tableName, user, roles })
+    })`, { table: Session.tableName, index: Session.tableName + '_byUser', user, roles })
   }
 })
 
