@@ -1,9 +1,7 @@
 const app = require("@live-change/framework").app()
 const validators = require("../validation")
 
-
 const { language: defaultLanguage, timezone: defaultTimezone } = require('../config/defaults.js')
-
 
 const definition = app.createServiceDefinition({
   name: "session",
@@ -45,7 +43,25 @@ definition.view({
     type: Session
   },
   daoPath(params, { client, context }, method) {
-    return Session.path(client.sessionId)
+    // return Session.path(client.sessionId)
+    return ['database', 'queryObject', app.databaseName, `(${
+      async (input, output, { session, tableName, defaultLanguage, defaultTimezone }) => {
+        const mapper = (obj) => (obj || {
+          id: session,
+          language: defaultLanguage,
+          timezone: defaultTimezone,
+          user: null,
+          roles: []
+        })
+        let storedObj = undefined
+        await input.table(tableName).object(session).onChange(async (obj, oldObj) => {              
+          const mappedObj = mapper(obj)
+          //output.debug("MAPPED DATA", session, "OBJ", mappedObj, "OLD OBJ", storedObj)
+          await output.change(mappedObj, storedObj)
+          storedObj = mappedObj
+        })
+      }
+    })`, { session: client.sessionId, tableName: Session.tableName, defaultLanguage, defaultTimezone }]
   }
 })
 
@@ -176,10 +192,10 @@ definition.event({
     }
   },
   async execute({ session, language, timezone }) {
-    await Session.update(session, {
-      language: language,
-      timezone: timezone
-    })
+    await Session.update(session, [
+      { op: 'reverseMerge', value: { id: session, user: null, roles: [] } },
+      { op: 'merge', value: { language: language, timezone: timezone } }
+    ])
   }
 })
 
@@ -204,7 +220,7 @@ definition.event({
   },
   async execute({ session, user, roles, expire, language, timezone }) {
     console.log("SESSION UPDATE", session, { user, roles, expire, language, timezone })
-    await Session.update(session, { user, roles, expire, language, timezone })
+    await Session.update(session, { id: session, user, roles, expire, language, timezone })
   }
 })
 
@@ -216,7 +232,14 @@ definition.event({
     }
   },
   async execute({ session }) {
-    await Session.update(session, { user: null, roles: [], expire: null })
+    //await Session.update(session, { user: null, roles: [], expire: null })
+    await Session.update(session, [
+      {
+        op: 'reverseMerge',
+        value: { id: session, language: defaultLanguage, timezone: defaultTimezone }
+      },
+      { op: 'merge', value: { user: null, roles: [] } }
+    ])
   }
 })
 
@@ -237,6 +260,10 @@ definition.event({
         }).onChange((ind, oldInd) => {
           if(ind && ind.to) {
             output.table(table).update(ind.to, [
+              {
+                op: 'reverseMerge',
+                value: { id: session, language: defaultLanguage, timezone: defaultTimezone }
+              },
               { op: 'merge', value: { user: null, roles: [], expire: null } }
             ])
           }
@@ -269,6 +296,10 @@ definition.event({
           }).onChange((ind, oldInd) => {
             if(ind && ind.to) {
               output.table(table).update(ind.to, [
+                {
+                  op: 'reverseMerge',
+                  value: { id: session, language: defaultLanguage, timezone: defaultTimezone }
+                },
                 { op: 'merge', value: { roles } }
               ])
             }
