@@ -54,7 +54,7 @@ definition.view({
           roles: []
         })
         let storedObj = undefined
-        await input.table(tableName).object(session).onChange(async (obj, oldObj) => {              
+        await input.table(tableName).object(session).onChange(async (obj, oldObj) => {
           const mappedObj = mapper(obj)
           //output.debug("MAPPED DATA", session, "OBJ", mappedObj, "OLD OBJ", storedObj)
           await output.change(mappedObj, storedObj)
@@ -252,7 +252,7 @@ definition.event({
   },
   async execute({ user }) {
     await app.dao.request(['database', 'query'], app.databaseName, `(${
-      async (input, output, { table, index, user }) => {
+      async (input, output, { table, index, user, defaults }) => {
         const prefix = `"${user}"_`
         await (await input.index(index)).range({
           gte: prefix,
@@ -262,14 +262,17 @@ definition.event({
             output.table(table).update(ind.to, [
               {
                 op: 'reverseMerge',
-                value: { id: ind.to, language: defaultLanguage, timezone: defaultTimezone }
+                value: { id: ind.to, ...defaults }
               },
               { op: 'merge', value: { user: null, roles: [], expire: null } }
             ])
           }
         })
       }
-    })`, { table: Session.tableName, index: Session.tableName + '_byUser', user })
+    })`, {
+      table: Session.tableName, index: Session.tableName + '_byUser', user,
+      defaults: { language: defaultLanguage, timezone: defaultTimezone }
+    })
   }
 })
 
