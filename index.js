@@ -315,6 +315,8 @@ definition.event({
 module.exports = definition
 
 async function start() {
+  if(!app.dao) await require('@live-change/server').setupApp({})
+
   process.on('unhandledRejection', (reason, p) => {
     console.log('Unhandled Rejection at: Promise', p, 'reason:', reason)
   })
