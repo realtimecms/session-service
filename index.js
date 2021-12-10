@@ -301,7 +301,7 @@ definition.event({
               output.table(table).update(ind.to, [
                 {
                   op: 'reverseMerge',
-                  value: { id: session, language: defaultLanguage, timezone: defaultTimezone }
+                  value: { id: ind.to, language: defaultLanguage, timezone: defaultTimezone }
                 },
                 { op: 'merge', value: { roles } }
               ])
