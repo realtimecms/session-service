@@ -291,7 +291,7 @@ definition.event({
   },
   async execute({ user, roles }) {
     await app.dao.request(['database', 'query'], app.databaseName, `(${
-        async (input, output, { table, index, user, roles }) => {
+        async (input, output, { table, index, user, roles, defaults }) => {
           const prefix = `"${user}"_`
           await (await input.index(index)).range({
             gte: prefix,
@@ -301,14 +301,17 @@ definition.event({
               output.table(table).update(ind.to, [
                 {
                   op: 'reverseMerge',
-                  value: { id: ind.to, language: defaultLanguage, timezone: defaultTimezone }
+                  value: { id: ind.to, ...defaults}
                 },
                 { op: 'merge', value: { roles } }
               ])
             }
           })
         }
-    })`, { table: Session.tableName, index: Session.tableName + '_byUser', user, roles })
+    })`, {
+      table: Session.tableName, index: Session.tableName + '_byUser', user, roles,
+      defaults: { language: defaultLanguage, timezone: defaultTimezone }
+    })
   }
 })
 
